@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for oQ (oMLX Universal Dynamic Quantization)."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -18,9 +18,12 @@ from omlx.oq import (
     _LEVEL_BITS,
     _MAX_MODEL_RAM_FRACTION,
     _OQ_BPW_TARGETS,
+    _PROXY_QUANT_BITS,
+    _PROXY_QUANT_GROUP_SIZE,
     _DiscoveredPlan,
     _TrackedTensor,
     _bpw_targets_for_level,
+    _build_proxy_for_sensitivity,
     _build_quant_plan,
     _discover_sanitize_plan,
     _extract_layer_index,
@@ -1386,6 +1389,75 @@ class TestModelExceedsRamGuard:
         # Does not exceed when system RAM is large
         large_ram = int(nbytes / _MAX_MODEL_RAM_FRACTION) + 1
         assert not (nbytes > int(large_ram * _MAX_MODEL_RAM_FRACTION))
+
+
+class TestBuildProxyForSensitivity:
+    """Tests for the auto-built sensitivity proxy.
+
+    The proxy is created when the source model exceeds available RAM and the
+    user has not supplied a pre-quantized model via sensitivity_model_path.
+    Without it, the OOM guard would silently fall back to a position-based
+    heuristic and lose oQ's data-driven mixed-precision allocation.
+    """
+
+    def test_invokes_mlx_lm_convert_with_uniform_4bit_affine(self, tmp_path):
+        """Proxy build delegates to mlx_lm.convert with uniform 4-bit affine."""
+        fake_convert = MagicMock()
+        with patch.dict(
+            "sys.modules", {"mlx_lm": MagicMock(convert=fake_convert)}
+        ):
+            proxy_dir = _build_proxy_for_sensitivity(
+                str(tmp_path / "src_model"), dtype="bfloat16"
+            )
+        assert fake_convert.call_count == 1
+        kwargs = fake_convert.call_args.kwargs
+        assert kwargs["hf_path"] == str(tmp_path / "src_model")
+        assert kwargs["quantize"] is True
+        assert kwargs["q_bits"] == _PROXY_QUANT_BITS
+        assert kwargs["q_group_size"] == _PROXY_QUANT_GROUP_SIZE
+        assert kwargs["q_mode"] == "affine"
+        assert kwargs["dtype"] == "bfloat16"
+        # Returned path is what was passed as mlx_path.
+        assert kwargs["mlx_path"] == str(proxy_dir)
+
+    def test_returns_path_under_system_temp(self, tmp_path):
+        """Proxy lives under the system temp dir, not next to the source."""
+        import tempfile
+
+        with patch.dict(
+            "sys.modules", {"mlx_lm": MagicMock(convert=MagicMock())}
+        ):
+            proxy_dir = _build_proxy_for_sensitivity(
+                str(tmp_path / "src_model"), dtype="bfloat16"
+            )
+        # tempfile.gettempdir() is the system temp root (e.g. /tmp).
+        assert str(proxy_dir).startswith(tempfile.gettempdir())
+        assert proxy_dir.name.startswith("omlx_oq_proxy_")
+
+    def test_caller_is_responsible_for_cleanup(self, tmp_path):
+        """The helper does not auto-delete the proxy; caller cleans up."""
+        fake_convert = MagicMock(
+            side_effect=lambda **kw: __import__("os").makedirs(kw["mlx_path"])
+        )
+        with patch.dict(
+            "sys.modules", {"mlx_lm": MagicMock(convert=fake_convert)}
+        ):
+            proxy_dir = _build_proxy_for_sensitivity(
+                str(tmp_path / "src_model"), dtype="bfloat16"
+            )
+        # The directory should still exist after the helper returns.
+        assert proxy_dir.exists()
+
+    def test_propagates_dtype_argument(self, tmp_path):
+        """dtype is forwarded so the proxy matches the target output dtype."""
+        fake_convert = MagicMock()
+        with patch.dict(
+            "sys.modules", {"mlx_lm": MagicMock(convert=fake_convert)}
+        ):
+            _build_proxy_for_sensitivity(
+                str(tmp_path / "src_model"), dtype="float16"
+            )
+        assert fake_convert.call_args.kwargs["dtype"] == "float16"
 
 
 
