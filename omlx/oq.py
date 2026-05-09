@@ -2252,7 +2252,9 @@ def quantize_oq_streaming(
         )
         _proxy_dir: Path | None = None
         try:
-            _proxy_dir = _build_proxy_for_sensitivity(model_path, dtype=dtype)
+            _proxy_dir = _build_proxy_for_sensitivity(
+                model_path, dtype=dtype, working_dir=str(output.parent),
+            )
             logger.info(
                 f"oQ{oq_level:g}: proxy ready at {_proxy_dir}, measuring sensitivity"
             )
@@ -3003,6 +3005,7 @@ def _build_proxy_for_sensitivity(
     model_path: str,
     *,
     dtype: str,
+    working_dir: str | None = None,
     trust_remote_code: bool = False,
 ) -> Path:
     """Build a temporary uniform 4-bit proxy for sensitivity measurement.
@@ -3012,13 +3015,20 @@ def _build_proxy_for_sensitivity(
     instead of falling back to a position-based heuristic that would
     silently degrade output quality.
 
+    ``working_dir`` controls where the proxy is written. Defaults to the
+    system temp dir when None, but callers should pass the parent of the
+    output directory so the proxy lands on the same volume the user has
+    already provisioned for the quantized output. This avoids the trap of
+    Linux ``/tmp`` being tmpfs (RAM-backed), which would defeat the whole
+    point of the OOM-driven proxy.
+
     The caller is responsible for deleting the returned directory.
     """
     from mlx_lm import convert
 
     # mlx-lm's convert() refuses to write into a pre-existing directory,
     # so reserve a unique temp name and let convert() create it.
-    proxy_dir = Path(tempfile.mkdtemp(prefix="omlx_oq_proxy_"))
+    proxy_dir = Path(tempfile.mkdtemp(prefix="omlx_oq_proxy_", dir=working_dir))
     shutil.rmtree(proxy_dir)
     convert(
         hf_path=model_path,

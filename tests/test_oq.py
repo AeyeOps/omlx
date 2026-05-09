@@ -1459,6 +1459,25 @@ class TestBuildProxyForSensitivity:
             )
         assert fake_convert.call_args.kwargs["dtype"] == "float16"
 
+    def test_working_dir_pins_proxy_to_output_volume(self, tmp_path):
+        """working_dir sets where mkdtemp anchors the proxy.
+
+        Critical on Linux where /tmp can be tmpfs (RAM-backed): the caller
+        passes the output volume so the proxy lands on actual disk and the
+        OOM-driven proxy build does not defeat itself.
+        """
+        anchor = tmp_path / "out_volume"
+        anchor.mkdir()
+        with patch.dict(
+            "sys.modules", {"mlx_lm": MagicMock(convert=MagicMock())}
+        ):
+            proxy_dir = _build_proxy_for_sensitivity(
+                str(tmp_path / "src_model"),
+                dtype="bfloat16",
+                working_dir=str(anchor),
+            )
+        assert proxy_dir.parent == anchor
+
 
 
 # =============================================================================
