@@ -1379,7 +1379,13 @@ def _resolve_keepalive(protocol: str) -> Optional[str]:
     if protocol == "anthropic":
         return _KEEPALIVE_ANTHROPIC_PING
     if protocol == "openai_responses":
-        return None
+        # SSE comment line is a spec-compliant no-op that any conformant
+        # parser ignores. Without keepalive on /v1/responses, clients like
+        # codex 0.130.0 disconnect during long prefills (codex bundles
+        # ~10-12k tokens of system+tools+skills per request, which on a
+        # 76GB 4-bit Mistral takes 30-60s to prefill — well past codex's
+        # read timeout). Returning None caused the abort/retry storm.
+        return _KEEPALIVE_COMMENT
     return None
 
 

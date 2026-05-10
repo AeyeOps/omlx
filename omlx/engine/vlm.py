@@ -39,6 +39,7 @@ from ..api.tool_calling import convert_tools_for_template
 from ..api.utils import clean_special_tokens, detect_and_strip_partial
 from ..cache.vision_feature_cache import VisionFeatureSSDCache
 from ..models.vlm import VLMModelAdapter
+from ..patches.chunked_kv_cache import apply_patch as apply_chunked_kv_cache_patch
 from ..patches.gated_delta_advance import apply_gated_delta_advance_patch
 from ..patches.qwen3_5_attention import apply_qwen3_5_attention_patch
 from ..utils.image import (
@@ -753,6 +754,10 @@ class VLMBatchedEngine(BaseEngine):
         # Patch mlx-vlm Qwen3_5Attention to use plain RoPE on text-only
         # inputs. Preserves mRoPE for genuine multimodal positions.
         apply_qwen3_5_attention_patch()
+        # Patch ChunkedKVCache (Llama-4 sliding-attention layers) to add
+        # single-batch merge/filter/extend so BatchGenerator can use it
+        # at concurrency=1.
+        apply_chunked_kv_cache_patch()
 
         # Create scheduler config
         scheduler_config = (
