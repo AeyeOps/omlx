@@ -1321,7 +1321,11 @@ def _resolve_keepalive(protocol: str) -> Optional[str]:
     if protocol == "anthropic":
         return _KEEPALIVE_ANTHROPIC_PING
     if protocol == "openai_responses":
-        return None
+        # Responses API has no protocol-level ping. Long prefills (10k+
+        # token system prompts on large quants) exceed typical client
+        # read timeouts and trigger reconnect storms. SSE comment lines
+        # are a spec-compliant no-op that conformant parsers ignore.
+        return _KEEPALIVE_COMMENT
     return None
 
 
