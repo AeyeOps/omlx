@@ -198,6 +198,7 @@ class TestResolveKeepalive:
         from omlx.server import (
             _KEEPALIVE_ANTHROPIC_PING,
             _KEEPALIVE_CHAT_CHUNK,
+            _KEEPALIVE_COMMENT,
             _KEEPALIVE_COMPLETION_CHUNK,
             _resolve_keepalive,
             _server_state,
@@ -211,8 +212,9 @@ class TestResolveKeepalive:
             assert _resolve_keepalive("openai_chat") == _KEEPALIVE_CHAT_CHUNK
             assert _resolve_keepalive("openai_completion") == _KEEPALIVE_COMPLETION_CHUNK
             assert _resolve_keepalive("anthropic") == _KEEPALIVE_ANTHROPIC_PING
-            # Responses API has no official ping; chunk mode disables keepalive
-            assert _resolve_keepalive("openai_responses") is None
+            # Responses API has no protocol-level ping; chunk mode falls
+            # back to an SSE comment line to keep long prefills alive.
+            assert _resolve_keepalive("openai_responses") == _KEEPALIVE_COMMENT
         finally:
             _server_state.global_settings.server.sse_keepalive_mode = original
 
