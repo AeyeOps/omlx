@@ -240,6 +240,9 @@ def serve_command(args):
         else:
             scheduler_config.hot_cache_max_size = 0
 
+        # Write queue depth: settings override, 0 = auto (RAM-scaled default).
+        scheduler_config.write_queue_depth = int(settings.cache.write_queue_depth or 0)
+
         if args.no_cache:
             print("Mode: Multi-model serving (no oMLX cache, mlx-lm BatchGenerator only)")
         elif paged_ssd_cache_dir:

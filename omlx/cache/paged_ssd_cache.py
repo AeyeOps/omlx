@@ -60,6 +60,10 @@ def _compute_max_pending_writes() -> int:
     large requests (e.g., 64 blocks per 4096-token request).
 
     Scales proportionally: 512GB = 256, 32GB = 32, minimum 32.
+
+    Note: this is the auto-computed default. Operators can override it via
+    settings.json → ``cache.write_queue_depth`` when they observe ``SSD write
+    queue full, dropping evicted block`` warnings under bursty load.
     """
     try:
         total_bytes = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
@@ -616,6 +620,7 @@ class PagedSSDCacheManager(CacheManager):
         hot_cache_only: bool = False,
         expected_model_name: str = "",
         expected_num_layers: int = 0,
+        write_queue_depth: int | None = None,
     ):
         """
         Initialize the SSD cache manager.
@@ -636,6 +641,11 @@ class PagedSSDCacheManager(CacheManager):
                 this check (backwards compatible). Catches stale blocks left
                 over after a model upgrade changes its effective layer count
                 (e.g., #1404 attaching MTPModule changed 30 → 40 layers).
+            write_queue_depth: Maximum pending writes queued for the
+                background writer thread. ``None`` (default) auto-computes
+                from system RAM. Set explicitly to absorb bursty evictions
+                when ``SSD write queue full, dropping evicted block`` warnings
+                are observed in the log.
         """
         self._cache_dir = cache_dir
         self._max_size = max_size_bytes
@@ -681,7 +691,14 @@ class PagedSSDCacheManager(CacheManager):
             self._scan_existing_files()
 
         # --- Background writer for non-blocking saves ---
-        self._write_queue: queue.Queue = queue.Queue(maxsize=_MAX_PENDING_WRITES)
+        # Operator override (settings.cache.write_queue_depth) wins over the
+        # RAM-scaled default. Must be ≥ 32 to keep the burst-absorption floor.
+        self._write_queue_depth = (
+            max(32, int(write_queue_depth))
+            if write_queue_depth is not None and write_queue_depth > 0
+            else _MAX_PENDING_WRITES
+        )
+        self._write_queue: queue.Queue = queue.Queue(maxsize=self._write_queue_depth)
         # Track which block hashes are queued for background write
         self._pending_write_hashes: set = set()
         self._pending_write_hashes_lock = threading.Lock()
@@ -719,6 +736,7 @@ class PagedSSDCacheManager(CacheManager):
         logger.info(
             f"PagedSSDCacheManager initialized: dir={self._cache_dir}, "
             f"max_size={format_bytes(max_size_bytes)}{hot_info}, "
+            f"write_queue_depth={self._write_queue_depth}, "
             f"existing_files={self._index.count}{disk_info}"
         )
 

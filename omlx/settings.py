@@ -227,6 +227,10 @@ class CacheSettings:
     ssd_cache_max_size: str = "auto"  # "auto" means 10% of SSD capacity
     hot_cache_max_size: str = "0"  # "0" = disabled, e.g. "8GB"
     initial_cache_blocks: int = 256  # Starting blocks (grows dynamically)
+    # 0 = auto (RAM-scaled default in paged_ssd_cache._compute_max_pending_writes).
+    # Raise this when you observe `SSD write queue full, dropping evicted block`
+    # warnings under bursty load — each 4K-token request can commit ~64 blocks.
+    write_queue_depth: int = 0
 
     def get_ssd_cache_dir(self, base_path: Path) -> Path:
         """
@@ -270,6 +274,7 @@ class CacheSettings:
             "ssd_cache_max_size": self.ssd_cache_max_size,
             "hot_cache_max_size": self.hot_cache_max_size,
             "initial_cache_blocks": self.initial_cache_blocks,
+            "write_queue_depth": self.write_queue_depth,
         }
 
     @classmethod
@@ -282,6 +287,7 @@ class CacheSettings:
             ssd_cache_max_size=data.get("ssd_cache_max_size", "auto"),
             hot_cache_max_size=data.get("hot_cache_max_size", "0"),
             initial_cache_blocks=data.get("initial_cache_blocks", 256),
+            write_queue_depth=int(data.get("write_queue_depth", 0)),
         )
 
 
