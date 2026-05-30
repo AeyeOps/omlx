@@ -113,6 +113,10 @@ def _compute_max_pending_writes(
     Defaults target a 35B-class bf16 model at the default
     ``paged_cache_block_size=256``; pass an explicit
     ``kv_bytes_per_token`` for larger models or quantized configs.
+
+    Note: this is the auto-computed default. Operators can override it via
+    settings.json → ``cache.write_queue_depth`` when they observe ``SSD write
+    queue full, dropping evicted block`` warnings under bursty load.
     """
     try:
         total_bytes = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
@@ -959,6 +963,7 @@ class PagedSSDCacheManager(CacheManager):
         expected_block_size_tokens: int = _DEFAULT_BLOCK_SIZE_TOKENS,
         expected_kv_bytes_per_token: int = _DEFAULT_KV_BYTES_PER_TOKEN,
         expected_layer_cache_types: list[str] | None = None,
+        write_queue_depth: int | None = None,
     ):
         """
         Initialize the SSD cache manager.
@@ -977,6 +982,7 @@ class PagedSSDCacheManager(CacheManager):
                 different model name are skipped at startup. Empty string
                 disables this check (backwards compatible).
             expected_num_layers: Current cache-layer count. Blocks saved with
+<<<<<<< HEAD
                 a different num_layers are skipped at startup. 0 disables this
                 check (backwards compatible). Catches stale blocks left over
                 after a model upgrade changes its effective layer count (e.g.,
@@ -1000,6 +1006,11 @@ class PagedSSDCacheManager(CacheManager):
             expected_layer_cache_types: Optional current cache layout. When
                 provided, blocks with a different per-layer type list are
                 skipped at startup.
+            write_queue_depth: Maximum pending writes queued for the
+                background writer thread. ``None`` (default) auto-computes
+                from system RAM. Set explicitly to absorb bursty evictions
+                when ``SSD write queue full, dropping evicted block`` warnings
+                are observed in the log.
         """
         self._cache_dir = cache_dir
         self._max_size = max_size_bytes
@@ -1072,10 +1083,17 @@ class PagedSSDCacheManager(CacheManager):
         # particular floor/ceiling band on the test host.
         self._expected_block_size_tokens = expected_block_size_tokens
         self._expected_kv_bytes_per_token = expected_kv_bytes_per_token
-        self._max_pending_writes = _compute_max_pending_writes(
-            block_size_tokens=expected_block_size_tokens,
-            kv_bytes_per_token=expected_kv_bytes_per_token,
+        # Operator override (settings.cache.write_queue_depth) wins over the
+        # RAM/block-scaled default. Must be ≥ 32 to keep the burst-absorption floor.
+        self._max_pending_writes = (
+            max(32, int(write_queue_depth))
+            if write_queue_depth is not None and write_queue_depth > 0
+            else _compute_max_pending_writes(
+                block_size_tokens=expected_block_size_tokens,
+                kv_bytes_per_token=expected_kv_bytes_per_token,
+            )
         )
+        self._write_queue_depth = self._max_pending_writes
         self._write_queue: queue.Queue = queue.Queue(maxsize=self._max_pending_writes)
         # Track which block hashes are queued for background write
         self._pending_write_hashes: set = set()
@@ -1115,6 +1133,7 @@ class PagedSSDCacheManager(CacheManager):
         logger.info(
             f"PagedSSDCacheManager initialized: dir={self._cache_dir}, "
             f"max_size={format_bytes(max_size_bytes)}{hot_info}, "
+            f"write_queue_depth={self._write_queue_depth}, "
             f"existing_files={self._index.count}{disk_info}"
         )
 

@@ -1325,6 +1325,9 @@ class SchedulerConfig:
     paged_ssd_cache_max_size: int = 100 * 1024 * 1024 * 1024  # 100GB default
     hot_cache_max_size: int = 0  # In-memory hot cache size in bytes (0 = disabled)
     hot_cache_budget: Any | None = None  # Shared process-wide hot cache budget
+    # 0 = auto (RAM-scaled default). Operator override surfaced via
+    # settings.cache.write_queue_depth — raise when SSD write queue full warns appear.
+    write_queue_depth: int = 0
 
     # Model identification (for cache isolation between different models)
     model_name: str = ""  # OpenAI API model name (e.g., "mlx-community/Llama-3.2-3B")
@@ -10003,6 +10006,7 @@ class Scheduler:
                 expected_block_size=self.config.paged_cache_block_size,
                 expected_block_size_tokens=self.config.paged_cache_block_size,
                 expected_kv_bytes_per_token=expected_kv_bytes_per_token,
+                write_queue_depth=self.config.write_queue_depth or None,
             )
 
             # Connect paged SSD cache manager to PagedCacheManager
