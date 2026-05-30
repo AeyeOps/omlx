@@ -121,5 +121,9 @@ docs/native_app_architecture.md
 
 # UV lockfile
 uv.lock
+
 # generated TurboQuant memory report (machine-specific)
 tq_batch_memory.md
+
+# AeyeOps local-only workspace (helpers / notes / scratch — never upstream)
+aeyeops/
