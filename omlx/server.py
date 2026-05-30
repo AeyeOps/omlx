@@ -4771,6 +4771,226 @@ async def stream_responses_api(
         _store_response_state(final_response, input_messages=input_messages or [])
 
 
+@app.post("/v1/responses/compact")
+async def create_response_compact(
+    request: ResponsesRequest,
+    http_request: FastAPIRequest,
+    _: bool = Depends(verify_api_key),
+):
+    """Codex 0.130+ auto-compaction endpoint.
+
+    Triggered by `model_auto_compact_token_limit`. Codex POSTs the
+    conversation here and expects an SSE stream containing exactly one
+    `context_compaction` output item with `content`, `summary`, or
+    `encrypted_content` as a string. The returned summary replaces prior
+    history in codex's local thread state.
+    """
+    from pathlib import Path
+    try:
+        body_bytes = await http_request.body()
+        log_dir = Path.home() / ".omlx" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        with (log_dir / "compact-requests.jsonl").open("ab") as fh:
+            fh.write(body_bytes + b"\n")
+    except Exception as cap_err:
+        logger.warning(f"compact body capture failed: {cap_err}")
+
+    if _server_state.oq_manager and _server_state.oq_manager.is_quantizing:
+        raise HTTPException(
+            status_code=503,
+            detail="Server is busy with oQ quantization. Try again after it completes.",
+        )
+
+    logger.info(
+        f"Compact request: model={request.model} "
+        f"input_items={len(request.input) if isinstance(request.input, list) else 'str'} "
+        f"prev_response_id={request.previous_response_id}"
+    )
+
+    engine = await get_engine_for_model(request.model)
+    resolved_model = resolve_model_id(request.model) or request.model
+
+    previous_messages = None
+    if request.previous_response_id:
+        previous_messages = _resolve_previous_response_messages(
+            request.previous_response_id
+        )
+
+    extras = request.model_extra or {}
+    compact_prompt = extras.get("compact_prompt") or (
+        "Summarize the conversation above concisely. Preserve decisions, code "
+        "changes, file paths touched, errors encountered, and outstanding TODOs. "
+        "Use plain prose. Do not invoke tools."
+    )
+
+    messages = convert_responses_input_to_messages(
+        request.input, compact_prompt, previous_messages
+    )
+
+    (
+        temperature, top_p, top_k, repetition_penalty, min_p,
+        presence_penalty, frequency_penalty, max_tokens,
+        xtc_probability, xtc_threshold,
+    ) = get_sampling_params(
+        request.temperature, request.top_p, request.model,
+        req_max_tokens=request.max_output_tokens or 8192,
+    )
+
+    chat_kwargs = {
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "top_p": top_p,
+        "top_k": top_k,
+        "min_p": min_p,
+        "repetition_penalty": repetition_penalty,
+        "presence_penalty": presence_penalty,
+        "frequency_penalty": frequency_penalty,
+        "xtc_probability": xtc_probability,
+        "xtc_threshold": xtc_threshold,
+    }
+
+    return StreamingResponse(
+        _with_sse_keepalive(
+            stream_compact_response(
+                engine, messages, request, chat_kwargs, resolved_model,
+            ),
+            http_request=http_request,
+            keepalive_chunk=_resolve_keepalive("openai_responses"),
+        ),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
+
+
+async def stream_compact_response(
+    engine: BaseEngine,
+    messages: list,
+    request: ResponsesRequest,
+    chat_kwargs: dict,
+    resolved_model: str,
+) -> AsyncIterator[str]:
+    """Stream a single `context_compaction` output item for codex auto-compact."""
+    from .api.shared_models import IDPrefix, generate_id
+
+    seq = 0
+    response_id = generate_id(IDPrefix.RESPONSE)
+    item_id = generate_id(IDPrefix.MESSAGE)
+    start_time = time.perf_counter()
+
+    initial_response = {
+        "id": response_id,
+        "object": "response",
+        "model": request.model,
+        "status": "in_progress",
+        "output": [],
+    }
+
+    seq += 1
+    yield format_sse_event("response.created", {
+        "type": "response.created",
+        "response": initial_response,
+        "sequence_number": seq,
+    })
+
+    seq += 1
+    yield format_sse_event("response.in_progress", {
+        "type": "response.in_progress",
+        "response": initial_response,
+        "sequence_number": seq,
+    })
+
+    in_progress_item = {
+        "type": "context_compaction",
+        "id": item_id,
+        "status": "in_progress",
+        "content": "",
+    }
+    seq += 1
+    yield format_sse_event("response.output_item.added", {
+        "type": "response.output_item.added",
+        "output_index": 0,
+        "item": in_progress_item,
+        "sequence_number": seq,
+    })
+
+    accumulated_text = ""
+    last_output = None
+    try:
+        async for output in engine.stream_chat(messages=messages, **chat_kwargs):
+            last_output = output
+            if output.new_text:
+                accumulated_text += output.new_text
+    except Exception as e:
+        logger.error(f"Compact streaming error: {e}")
+        seq += 1
+        yield format_sse_event("response.failed", {
+            "type": "response.failed",
+            "response": {**initial_response, "status": "failed"},
+            "sequence_number": seq,
+        })
+        return
+
+    raw_text = clean_special_tokens(accumulated_text) if accumulated_text else ""
+    _thinking, final_text = extract_thinking(raw_text)
+
+    done_item = {
+        "type": "context_compaction",
+        "id": item_id,
+        "status": "completed",
+        "content": final_text,
+        "summary": final_text,
+        "encrypted_content": final_text,
+    }
+    seq += 1
+    yield format_sse_event("response.output_item.done", {
+        "type": "response.output_item.done",
+        "output_index": 0,
+        "item": done_item,
+        "sequence_number": seq,
+    })
+
+    usage = None
+    if last_output and last_output.finished:
+        elapsed = time.perf_counter() - start_time
+        get_server_metrics().record_request_complete(
+            prompt_tokens=last_output.prompt_tokens,
+            completion_tokens=last_output.completion_tokens,
+            cached_tokens=last_output.cached_tokens,
+            generation_duration=elapsed,
+            model_id=resolved_model,
+        )
+        usage = {
+            "input_tokens": last_output.prompt_tokens,
+            "output_tokens": last_output.completion_tokens,
+            "total_tokens": last_output.prompt_tokens + last_output.completion_tokens,
+            "input_tokens_details": {"cached_tokens": last_output.cached_tokens},
+            "output_tokens_details": {"reasoning_tokens": 0},
+        }
+
+    final_response = {
+        "id": response_id,
+        "object": "response",
+        "model": request.model,
+        "status": "completed",
+        "output": [done_item],
+        "usage": usage,
+    }
+    if request.previous_response_id:
+        final_response["previous_response_id"] = request.previous_response_id
+
+    seq += 1
+    yield format_sse_event("response.completed", {
+        "type": "response.completed",
+        "response": final_response,
+        "sequence_number": seq,
+    })
+
+    logger.info(
+        f"Compact response: {len(final_text)} chars, "
+        f"{(last_output.completion_tokens if last_output else 0)} tokens"
+    )
+
+
 @app.get("/v1/responses/{response_id}")
 async def get_response(
     response_id: str,

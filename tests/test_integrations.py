@@ -192,6 +192,72 @@ name = "old-omlx"
         assert "PYTHONPATH" not in captured["env"]
         assert "PYTHONDONTWRITEBYTECODE" not in captured["env"]
 
+    def test_configure_inserts_compaction_defaults(self, tmp_path):
+        """First-time configure injects context window + auto-compact keys.
+
+        Without these, codex 0.130+ falls back to its model-name heuristic
+        (often double the real ceiling) and never triggers auto-compaction
+        against the oMLX-served context window.
+        """
+        config_path = tmp_path / "config.toml"
+        codex = CodexIntegration()
+        with patch.object(CodexIntegration, "CONFIG_PATH", config_path):
+            codex.configure(port=8000, api_key="", model="llama-3.1-8b")
+
+        content = config_path.read_text()
+        assert "model_context_window =" in content
+        assert "model_auto_compact_token_limit =" in content
+
+    def test_configure_preserves_user_compaction_overrides(self, tmp_path):
+        """User-set values for the compaction keys must not be overwritten."""
+        config_path = tmp_path / "config.toml"
+        config_path.write_text(
+            'model = "old"\n'
+            'model_context_window = 64000\n'
+            'model_auto_compact_token_limit = 48000\n'
+        )
+
+        codex = CodexIntegration()
+        with patch.object(CodexIntegration, "CONFIG_PATH", config_path):
+            codex.configure(port=8000, api_key="", model="new")
+
+        content = config_path.read_text()
+        assert "model_context_window = 64000" in content
+        assert "model_auto_compact_token_limit = 48000" in content
+
+    def test_configure_preserves_provider_user_fields(self, tmp_path):
+        """User-set fields in [model_providers.omlx] must survive a reconfigure.
+
+        Examples: stream_idle_timeout_ms, request_max_retries — settings the
+        user added to keep codex from retry-storming oMLX during long prefills.
+        """
+        config_path = tmp_path / "config.toml"
+        config_path.write_text(
+            'model = "old"\n'
+            '\n[model_providers.omlx]\n'
+            'name = "old-name"\n'
+            'base_url = "http://stale:1234/v1"\n'
+            'env_key = "OLD_KEY"\n'
+            'stream_idle_timeout_ms = 3600000\n'
+            'stream_max_retries = 0\n'
+            'request_max_retries = 0\n'
+        )
+
+        codex = CodexIntegration()
+        with patch.object(CodexIntegration, "CONFIG_PATH", config_path):
+            codex.configure(port=6789, api_key="", model="new")
+
+        content = config_path.read_text()
+        # Managed fields refreshed
+        assert 'name = "oMLX"' in content
+        assert 'base_url = "http://127.0.0.1:6789/v1"' in content
+        assert 'env_key = "OMLX_API_KEY"' in content
+        assert "stale" not in content
+        # User fields preserved
+        assert "stream_idle_timeout_ms = 3600000" in content
+        assert "stream_max_retries = 0" in content
+        assert "request_max_retries = 0" in content
+
 
 class TestOpenCodeIntegration:
     def test_get_command(self):
