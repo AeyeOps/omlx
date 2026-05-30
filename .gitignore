@@ -119,3 +119,6 @@ docs/native_app_architecture.md
 
 # UV lockfile
 uv.lock
+
+# AeyeOps local-only workspace (helpers / notes / scratch — never upstream)
+aeyeops/
