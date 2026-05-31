@@ -243,6 +243,12 @@ def serve_command(args):
         # Write queue depth: settings override, 0 = auto (RAM-scaled default).
         scheduler_config.write_queue_depth = int(settings.cache.write_queue_depth or 0)
 
+        # Hot-cache-only: retain the in-memory prefix cache but skip all SSD I/O
+        # (boundary snapshots + store dispatch). CLI flag wins over settings/env.
+        scheduler_config.hot_cache_only = bool(
+            args.hot_cache_only or settings.cache.hot_cache_only
+        )
+
         if args.no_cache:
             print("Mode: Multi-model serving (no oMLX cache, mlx-lm BatchGenerator only)")
         elif paged_ssd_cache_dir:
@@ -609,6 +615,13 @@ Example directory structure:
         "--no-cache",
         action="store_true",
         help="Disable oMLX paged SSD cache. mlx-lm BatchGenerator still manages KV states internally.",
+    )
+    serve_parser.add_argument(
+        "--hot-cache-only",
+        action="store_true",
+        help="Keep the in-memory prefix/hot cache but skip ALL SSD I/O (no boundary "
+        "snapshots, no store dispatch). Removes the per-call SSD tax on workloads "
+        "with many short calls, while retaining prefix caching. Overrides settings.",
     )
     serve_parser.add_argument(
         "--initial-cache-blocks",
