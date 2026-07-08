@@ -1,0 +1,264 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1778671716172,
+  "projectRoot": "/Users/steve.antonakakis/Developer/aeo/omlx",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Rust",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "Cargo.toml"
+        ]
+      },
+      {
+        "name": "Python",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "pyproject.toml"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "fastapi",
+        "version": null,
+        "category": "backend"
+      },
+      {
+        "name": "pytest",
+        "version": null,
+        "category": "testing"
+      }
+    ],
+    "packageManager": "cargo",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "cargo build",
+    "testCommand": "/Users/steve.antonakakis/.venvs/omlx-src/bin/python3 -m pytest tests/test_integrations.py -x --tb=short -q 2>&1 | tail -30",
+    "lintCommand": "cargo clippy",
+    "devCommand": "cargo run",
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "scripts",
+      "src",
+      "tests"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "Formula": {
+      "path": "Formula",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1778671716146,
+      "keyFiles": [
+        "omlx.rb"
+      ]
+    },
+    "aeyeops": {
+      "path": "aeyeops",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1778671716147,
+      "keyFiles": [
+        "README.md"
+      ]
+    },
+    "bench": {
+      "path": "bench",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1778671716147,
+      "keyFiles": []
+    },
+    "data": {
+      "path": "data",
+      "purpose": "Data files",
+      "fileCount": 0,
+      "lastAccessed": 1778671716147,
+      "keyFiles": []
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 2,
+      "lastAccessed": 1778671716148,
+      "keyFiles": [
+        "CONTRIBUTING.md",
+        "oQ_Quantization.md"
+      ]
+    },
+    "omlx": {
+      "path": "omlx",
+      "purpose": null,
+      "fileCount": 25,
+      "lastAccessed": 1778671716148,
+      "keyFiles": [
+        "__init__.py",
+        "_version.py",
+        "cli.py",
+        "config.py",
+        "engine_core.py"
+      ]
+    },
+    "omlx.egg-info": {
+      "path": "omlx.egg-info",
+      "purpose": null,
+      "fileCount": 6,
+      "lastAccessed": 1778671716149,
+      "keyFiles": [
+        "PKG-INFO",
+        "SOURCES.txt",
+        "dependency_links.txt",
+        "entry_points.txt",
+        "requires.txt"
+      ]
+    },
+    "packaging": {
+      "path": "packaging",
+      "purpose": null,
+      "fileCount": 4,
+      "lastAccessed": 1778671716149,
+      "keyFiles": [
+        "README.md",
+        "build.py",
+        "venvstacks.toml"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 1,
+      "lastAccessed": 1778671716150,
+      "keyFiles": [
+        "normalize_i18n.py"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 0,
+      "lastAccessed": 1778671716150,
+      "keyFiles": []
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 125,
+      "lastAccessed": 1778671716151,
+      "keyFiles": [
+        "bench_grammar_bitmask.py",
+        "bench_results.csv",
+        "conftest.py",
+        "e2e_vision_cache.py",
+        "mocks.py"
+      ]
+    },
+    "usertests": {
+      "path": "usertests",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1778671716151,
+      "keyFiles": [
+        "sql-engine-goal.md"
+      ]
+    },
+    "aeyeops/bin": {
+      "path": "aeyeops/bin",
+      "purpose": "Executable scripts",
+      "fileCount": 1,
+      "lastAccessed": 1778671716152,
+      "keyFiles": [
+        "omlx-menubar"
+      ]
+    },
+    "omlx/api": {
+      "path": "omlx/api",
+      "purpose": "API routes",
+      "fileCount": 17,
+      "lastAccessed": 1778671716152,
+      "keyFiles": [
+        "__init__.py",
+        "anthropic_models.py",
+        "anthropic_utils.py"
+      ]
+    },
+    "src/types": {
+      "path": "src/types",
+      "purpose": "Type definitions",
+      "fileCount": 1,
+      "lastAccessed": 1778671716153,
+      "keyFiles": [
+        "mod.rs"
+      ]
+    },
+    "tests/fixtures": {
+      "path": "tests/fixtures",
+      "purpose": "Test fixtures",
+      "fileCount": 2,
+      "lastAccessed": 1778671716153,
+      "keyFiles": [
+        "generate_test_audio.py",
+        "test_audio.wav"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "omlx/server.py",
+      "accessCount": 11,
+      "lastAccessed": 1778542038018,
+      "type": "file"
+    },
+    {
+      "path": "omlx/integrations/codex.py",
+      "accessCount": 4,
+      "lastAccessed": 1778710334262,
+      "type": "file"
+    },
+    {
+      "path": "omlx/api/responses_models.py",
+      "accessCount": 2,
+      "lastAccessed": 1778541740826,
+      "type": "file"
+    },
+    {
+      "path": "omlx/api/openai_models.py",
+      "accessCount": 2,
+      "lastAccessed": 1778542025962,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_integrations.py",
+      "accessCount": 2,
+      "lastAccessed": 1778542147066,
+      "type": "file"
+    },
+    {
+      "path": "omlx/settings.py",
+      "accessCount": 2,
+      "lastAccessed": 1778548582856,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

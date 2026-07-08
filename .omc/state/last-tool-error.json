@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"ls -la ~/.claude/projects/-Users-steve-antonakakis-Developer-aeo-omlx/memory/ 2>/dev/null\",\"description\":\"List memory dir for this project\"}",
+  "error": "Exit code 1",
+  "timestamp": "2026-05-13T23:27:42.516Z",
+  "retry_count": 1
+}
