@@ -982,7 +982,6 @@ class PagedSSDCacheManager(CacheManager):
                 different model name are skipped at startup. Empty string
                 disables this check (backwards compatible).
             expected_num_layers: Current cache-layer count. Blocks saved with
-<<<<<<< HEAD
                 a different num_layers are skipped at startup. 0 disables this
                 check (backwards compatible). Catches stale blocks left over
                 after a model upgrade changes its effective layer count (e.g.,
